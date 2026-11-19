@@ -1,0 +1,1980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>VoxelForge 3D — Cube Modeling Studio</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0f172a;
+      touch-action: none;
+    }
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.78);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.45);
+    }
+    .swatch-btn {
+      transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease;
+    }
+    .swatch-btn:active {
+      transform: scale(0.9);
+    }
+    .swatch-active {
+      transform: scale(1.15);
+      box-shadow: 0 0 0 2.5px #0f172a, 0 0 0 4.5px #38bdf8;
+    }
+    /* Custom scrollbar for horizontal color bar on small screens */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    @keyframes pulseBorder {
+      0%, 100% { border-color: rgba(245, 158, 11, 0.45); }
+      50% { border-color: rgba(245, 158, 11, 0.95); }
+    }
+    .locked-ring {
+      animation: pulseBorder 2s infinite ease-in-out;
+    }
+    input[type="range"].studio-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      background: rgba(51, 65, 85, 0.9);
+      height: 6px;
+      border-radius: 999px;
+    }
+    input[type="range"].studio-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #38bdf8;
+      cursor: pointer;
+      border: 2px solid #0f172a;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+    }
+    input[type="range"].studio-slider::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #38bdf8;
+      cursor: pointer;
+      border: 2px solid #0f172a;
+    }
+  </style>
+  <!-- Import Map for Three.js & Addons -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body class="text-slate-100 antialiased">
+
+  <!-- 3D Viewport Container -->
+  <div id="canvas-container"></div>
+
+  <!-- Top HUD Bar -->
+  <header class="fixed top-0 left-0 right-0 z-20 p-2 sm:p-4 pointer-events-none flex flex-col gap-2">
+    <div class="max-w-6xl w-full mx-auto flex items-center justify-between gap-1.5 sm:gap-2">
+      
+      <!-- Brand + Cube Counter -->
+      <div class="glass-panel rounded-2xl px-2.5 py-2 sm:px-4 sm:py-2.5 flex items-center gap-2 sm:gap-2.5 pointer-events-auto">
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-400 to-indigo-600 flex items-center justify-center shadow-inner shrink-0">
+          <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+            <line x1="12" y1="22.08" x2="12" y2="12"/>
+          </svg>
+        </div>
+        <div class="leading-tight">
+          <div class="text-xs sm:text-sm font-bold tracking-tight text-white">VoxelForge</div>
+          <div class="text-[11px] text-slate-400 font-medium"><span id="cube-count" class="text-sky-400 font-semibold">0</span> cubes</div>
+        </div>
+      </div>
+
+      <!-- Center / Right Action Controls -->
+      <div class="flex items-center gap-1 sm:gap-2 pointer-events-auto">
+        
+        <!-- Saved Models & Upload Library Button -->
+        <button id="btn-models" type="button" title="Save, Reuse & Upload Models"
+          class="glass-panel rounded-2xl px-2.5 py-2.5 sm:px-3.5 sm:py-2.5 flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-indigo-300 hover:bg-slate-800/90 border border-indigo-400/30 transition active:scale-95">
+          <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+          <span>Models</span>
+        </button>
+
+        <!-- Lock / Unlock Model Toggle -->
+        <button id="btn-lock" type="button" title="Lock or Unlock Model"
+          class="glass-panel rounded-2xl px-2.5 py-2.5 sm:px-3.5 sm:py-2.5 flex items-center gap-1.5 text-xs sm:text-sm font-semibold transition active:scale-95 hover:bg-slate-800/90 text-emerald-400 border border-emerald-500/30">
+          <svg id="icon-unlocked" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+          </svg>
+          <svg id="icon-locked" class="w-4 h-4 shrink-0 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          <span id="lock-label" class="hidden md:inline">Unlocked</span>
+        </button>
+
+        <!-- Undo / Redo Group -->
+        <div class="glass-panel rounded-2xl p-1 flex items-center gap-0.5">
+          <button id="btn-undo" type="button" title="Undo" disabled
+            class="p-1.5 sm:p-2 rounded-xl text-slate-200 hover:bg-white/10 disabled:opacity-35 disabled:pointer-events-none transition active:scale-90">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
+            </svg>
+          </button>
+          <button id="btn-redo" type="button" title="Redo" disabled
+            class="p-1.5 sm:p-2 rounded-xl text-slate-200 hover:bg-white/10 disabled:opacity-35 disabled:pointer-events-none transition active:scale-90">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Export Dropdown Button -->
+        <div class="relative">
+          <button id="btn-export-toggle" type="button" title="Download / Export 3D Model"
+            class="glass-panel rounded-2xl px-2.5 py-2.5 sm:px-3.5 sm:py-2.5 flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-sky-300 hover:bg-slate-800/90 transition active:scale-95">
+            <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            <span class="hidden sm:inline">Export</span>
+          </button>
+
+          <!-- Export Menu -->
+          <div id="export-menu" class="hidden absolute right-0 mt-2 w-60 glass-panel rounded-2xl p-1.5 shadow-2xl border border-slate-700/80 z-30">
+            <div class="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Real 3D Mesh Export</div>
+            <button data-export="glb" class="export-option w-full text-left px-3 py-2 rounded-xl hover:bg-sky-500/20 flex items-center justify-between text-xs sm:text-sm font-medium text-slate-100 transition">
+              <div>
+                <div>GLB Binary</div>
+                <div class="text-[10px] text-slate-400">Merged mesh + PBR colors</div>
+              </div>
+              <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300">.GLB</span>
+            </button>
+            <button data-export="obj" class="export-option w-full text-left px-3 py-2 rounded-xl hover:bg-sky-500/20 flex items-center justify-between text-xs sm:text-sm font-medium text-slate-100 transition">
+              <div>
+                <div>Wavefront OBJ</div>
+                <div class="text-[10px] text-slate-400">Standard 3D mesh + materials</div>
+              </div>
+              <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300">.OBJ</span>
+            </button>
+            <button data-export="stl" class="export-option w-full text-left px-3 py-2 rounded-xl hover:bg-sky-500/20 flex items-center justify-between text-xs sm:text-sm font-medium text-slate-100 transition">
+              <div>
+                <div>3D Print STL</div>
+                <div class="text-[10px] text-slate-400">Centered solid binary mesh</div>
+              </div>
+              <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">.STL</span>
+            </button>
+            <div class="my-1 border-t border-slate-700/70"></div>
+            <div class="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Editable Backup</div>
+            <button data-export="json" class="export-option w-full text-left px-3 py-2 rounded-xl hover:bg-amber-500/20 flex items-center justify-between text-xs sm:text-sm font-medium text-slate-100 transition">
+              <span>Voxel Project</span>
+              <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">.JSON</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Clear Scene Button -->
+        <button id="btn-clear" type="button" title="Clear All Cubes"
+          class="glass-panel rounded-2xl p-2 sm:p-2.5 text-rose-400 hover:bg-rose-500/20 transition active:scale-95">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          </svg>
+        </button>
+
+      </div>
+    </div>
+
+    <!-- Contextual Status Pill / Locked Banner -->
+    <div class="max-w-lg mx-auto pointer-events-none flex justify-center">
+      <div id="status-pill" class="glass-panel rounded-full px-3.5 py-1.5 text-[11px] sm:text-xs font-medium text-slate-200 flex items-center gap-2 transition-all">
+        <span id="status-dot" class="w-2 h-2 rounded-full bg-sky-400 shrink-0"></span>
+        <span id="status-text">Tap once to position ghost, tap again to build</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Floating Contextual Action Bar (appears when a cube is selected or ghost is staged) -->
+  <div id="context-action-bar" class="hidden fixed bottom-36 sm:bottom-40 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
+    <div class="glass-panel rounded-2xl p-1.5 flex items-center gap-2 shadow-2xl border border-slate-600/60">
+      <!-- Confirm Build Button (shown when ghost is staged in Build mode) -->
+      <button id="btn-confirm-place" type="button"
+        class="hidden px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs sm:text-sm flex items-center gap-1.5 transition active:scale-95 shadow-lg shadow-sky-500/25">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <span>Place Cube</span>
+      </button>
+
+      <!-- Delete Selected Cube Button (shown when an existing cube is selected) -->
+      <button id="btn-delete-selected" type="button"
+        class="hidden px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 transition active:scale-95 shadow-lg shadow-rose-500/25">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+        </svg>
+        <span>Delete Cube</span>
+      </button>
+
+      <!-- Cancel Selection / Ghost Button -->
+      <button id="btn-cancel-selection" type="button" title="Cancel"
+        class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs sm:text-sm transition active:scale-95">
+        Cancel
+      </button>
+    </div>
+  </div>
+
+  <!-- Bottom Modeling Dock -->
+  <footer id="bottom-dock" class="fixed bottom-0 left-0 right-0 z-20 p-2 sm:p-4 pointer-events-none transition-opacity duration-200">
+    <div class="max-w-2xl mx-auto glass-panel rounded-3xl p-2.5 sm:p-3 pointer-events-auto flex flex-col gap-2">
+      
+      <!-- Row 1: Mode Switcher + Tap Cadence Toggle + Reset View -->
+      <div class="flex items-center justify-between gap-2">
+        
+        <!-- Mode Segmented Control -->
+        <div class="bg-slate-900/90 p-1 rounded-2xl flex items-center gap-1 border border-white/5">
+          <button id="mode-build" type="button"
+            class="px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 bg-sky-500 text-slate-950 shadow transition">
+            <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            <span>Build</span>
+          </button>
+          <button id="mode-select" type="button"
+            class="px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 text-slate-300 hover:text-white transition">
+            <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/>
+            </svg>
+            <span>Select / Delete</span>
+          </button>
+        </div>
+
+        <!-- Right Controls: 2-Tap vs 1-Tap Toggle & Camera Reset -->
+        <div class="flex items-center gap-1.5">
+          <button id="btn-tap-mode" type="button" title="Switch between 2-Tap Preview+Place and 1-Tap Instant Place"
+            class="px-2.5 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-white/10 text-[11px] sm:text-xs font-semibold text-slate-200 transition active:scale-95">
+            2-Tap Mode
+          </button>
+          <button id="btn-reset-cam" type="button" title="Center & Reset Camera View"
+            class="p-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-white/10 text-slate-300 hover:text-white transition active:scale-95">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Row 2: Cube Size Selector (Presets + Fine Slider) -->
+      <div class="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 bg-slate-900/75 px-2.5 py-1.5 rounded-2xl border border-white/5">
+        <div class="flex items-center gap-1.5">
+          <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Size</span>
+          <span id="size-readout" class="text-xs font-bold text-sky-400 bg-sky-500/15 px-2 py-0.5 rounded-md min-w-[44px] text-center">1.0x</span>
+        </div>
+
+        <!-- Quick Preset Buttons -->
+        <div id="size-presets" class="flex items-center gap-1 overflow-x-auto no-scrollbar">
+          <button type="button" data-size="0.25" class="size-preset px-2 py-1 rounded-lg text-[11px] font-semibold bg-slate-800 text-slate-300 hover:text-white transition">0.25</button>
+          <button type="button" data-size="0.5" class="size-preset px-2 py-1 rounded-lg text-[11px] font-semibold bg-slate-800 text-slate-300 hover:text-white transition">0.5</button>
+          <button type="button" data-size="1" class="size-preset px-2 py-1 rounded-lg text-[11px] font-semibold bg-sky-500 text-slate-950 transition">1x</button>
+          <button type="button" data-size="1.5" class="size-preset px-2 py-1 rounded-lg text-[11px] font-semibold bg-slate-800 text-slate-300 hover:text-white transition">1.5</button>
+          <button type="button" data-size="2" class="size-preset px-2 py-1 rounded-lg text-[11px] font-semibold bg-slate-800 text-slate-300 hover:text-white transition">2x</button>
+          <button type="button" data-size="3" class="size-preset px-2 py-1 rounded-lg text-[11px] font-semibold bg-slate-800 text-slate-300 hover:text-white transition">3x</button>
+        </div>
+
+        <!-- Fine Size Slider + Stepper -->
+        <div class="flex items-center gap-1.5 flex-1 sm:max-w-[165px]">
+          <button id="btn-size-dec" type="button" title="Smaller Cube" class="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center active:scale-90">-</button>
+          <input id="size-slider" type="range" min="0.25" max="4" step="0.25" value="1" class="studio-slider w-full" />
+          <button id="btn-size-inc" type="button" title="Bigger Cube" class="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center active:scale-90">+</button>
+        </div>
+      </div>
+
+      <!-- Row 3: Color Palette Swatches -->
+      <div class="flex items-center gap-2 pt-0.5">
+        <div id="color-palette" class="flex-1 flex items-center justify-between sm:justify-start gap-2 overflow-x-auto no-scrollbar py-1 px-1">
+          <!-- Swatches injected by JS -->
+        </div>
+        <!-- Custom Color Picker -->
+        <label title="Custom Color" class="relative w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden cursor-pointer shrink-0 border-2 border-white/25 shadow-inner flex items-center justify-center bg-gradient-to-tr from-pink-500 via-amber-400 to-cyan-400 active:scale-90 transition">
+          <input id="custom-color-input" type="color" value="#38bdf8" class="opacity-0 absolute inset-0 w-full h-full cursor-pointer" />
+          <svg class="w-4 h-4 text-white drop-shadow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+        </label>
+      </div>
+
+    </div>
+  </footer>
+
+  <!-- Models Library & Upload Drawer / Modal -->
+  <div id="models-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
+    <div class="glass-panel rounded-3xl max-w-2xl w-full max-h-[88vh] flex flex-col border border-slate-700 shadow-2xl overflow-hidden">
+      
+      <!-- Modal Header -->
+      <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <h2 class="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+            <span>Saved Models & Upload Studio</span>
+          </h2>
+          <p class="text-xs text-slate-400">Save builds to reuse later, combine parts together, or upload 3D files</p>
+        </div>
+        <button id="btn-close-models" type="button" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Modal Scrollable Content -->
+      <div class="p-4 sm:p-5 overflow-y-auto space-y-5 flex-1">
+        
+        <!-- Section 1: Save Current Creation -->
+        <div class="bg-slate-900/80 rounded-2xl p-3.5 border border-white/10">
+          <div class="text-xs font-bold uppercase tracking-wider text-sky-400 mb-2">Save Current Scene</div>
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input id="save-model-name" type="text" maxlength="36" placeholder="e.g., Castle Tower, Mech Wheel, Tree..."
+              class="flex-1 bg-slate-950/90 border border-slate-700 focus:border-sky-400 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none" />
+            <button id="btn-save-model" type="button"
+              class="px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-sm flex items-center justify-center gap-1.5 transition active:scale-95 shrink-0">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+              </svg>
+              <span>Save Model</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Section 2: Upload Model (.JSON, .OBJ, .STL) -->
+        <div class="bg-slate-900/80 rounded-2xl p-3.5 border border-white/10">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div class="text-xs font-bold uppercase tracking-wider text-indigo-400">Upload / Import File</div>
+            <div class="flex items-center gap-2 text-xs text-slate-300">
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input id="upload-merge-mode" type="checkbox" class="rounded accent-sky-500" />
+                <span>Insert into current build (instead of replacing)</span>
+              </label>
+            </div>
+          </div>
+
+          <label for="model-file-input"
+            class="mt-1 border-2 border-dashed border-slate-700 hover:border-indigo-400 bg-slate-950/60 hover:bg-slate-900/90 rounded-2xl p-4 flex flex-col items-center justify-center text-center cursor-pointer transition">
+            <svg class="w-7 h-7 text-indigo-400 mb-1.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <span class="text-xs sm:text-sm font-semibold text-white">Tap to upload .JSON, .OBJ, or .STL model</span>
+            <span class="text-[11px] text-slate-400 mt-0.5">.OBJ &amp; .STL files are automatically converted into editable cubes</span>
+            <input id="model-file-input" type="file" accept=".json,.obj,.stl" class="hidden" />
+          </label>
+        </div>
+
+        <!-- Section 3: Saved Library Gallery -->
+        <div>
+          <div class="flex items-center justify-between mb-2.5">
+            <div class="text-xs font-bold uppercase tracking-wider text-slate-300">Your Saved Models (<span id="saved-count">0</span>)</div>
+            <span class="text-[11px] text-slate-400">Load replaces scene • Insert adds onto scene</span>
+          </div>
+          <div id="saved-models-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <!-- Saved model cards injected by JS -->
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Confirmation Modal (Replaces window.confirm/alert) -->
+  <div id="confirm-modal" class="hidden fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="glass-panel rounded-3xl max-w-sm w-full p-6 border border-slate-700 shadow-2xl">
+      <h3 class="text-lg font-bold text-white mb-1.5">Clear Entire Model?</h3>
+      <p class="text-sm text-slate-300 mb-5">This will remove all cubes from the workspace. You can still use Undo if needed.</p>
+      <div class="flex items-center justify-end gap-2.5">
+        <button id="modal-cancel" type="button" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold transition">
+          Keep Model
+        </button>
+        <button id="modal-confirm" type="button" class="px-4 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-400 text-white text-sm font-bold transition">
+          Clear All
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="pointer-events-none fixed top-20 left-1/2 -translate-x-1/2 z-50 opacity-0 -translate-y-2 transition-all duration-200">
+    <div class="glass-panel rounded-full px-4 py-2 text-xs sm:text-sm font-semibold text-white border border-sky-400/30 shadow-xl flex items-center gap-2">
+      <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+      <span id="toast-msg">Exported successfully</span>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { OBJExporter } from 'three/addons/exporters/OBJExporter.js';
+    import { STLExporter } from 'three/addons/exporters/STLExporter.js';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+    import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+    import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+    import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+
+    // =========================================================================
+    // 1. APPLICATION STATE & CONFIGURATION
+    // =========================================================================
+    const GRID_SIZE = 20;          // 20x20 ground grid (-10 to +10)
+    const HALF_GRID = GRID_SIZE / 2;
+    const MAX_HEIGHT = 24;         // Vertical build ceiling
+    const SNAP_STEP = 0.25;        // Sub-grid snapping increment for multi-size cubes
+    const STORAGE_KEY = 'voxelforge_saved_models_v1';
+
+    const PALETTE = [
+      '#38bdf8', // Sky Blue
+      '#6366f1', // Indigo
+      '#ec4899', // Pink
+      '#f43f5e', // Rose Red
+      '#f97316', // Orange
+      '#eab308', // Yellow
+      '#22c55e', // Emerald Green
+      '#14b8a6', // Teal
+      '#f8fafc', // Crisp White
+      '#94a3b8', // Cool Gray
+      '#475569', // Slate Dark
+      '#78350f'  // Wood Brown
+    ];
+
+    const state = {
+      mode: 'build',              // 'build' | 'select'
+      twoTapMode: true,           // true = 1st tap defines place, 2nd tap builds; false = 1 tap builds
+      isLocked: false,            // Locks model against edits while permitting orbit/zoom
+      activeColor: PALETTE[0],
+      activeSize: 1.0,            // Current cube edge length (0.25 to 4.0)
+      voxels: new Map(),          // key: id -> { id, mesh, color, x, y, z, size } (x,y,z = center coords)
+      nextId: 1,
+      stagedPos: null,            // { x, y, z, size } currently previewed by ghost cube
+      selectedId: null,           // id of currently selected cube in 'select' mode
+      undoStack: [],              // Snapshots of voxel arrays
+      redoStack: []
+    };
+
+    // =========================================================================
+    // 2. THREE.JS SCENE, CAMERA, RENDERER & LIGHTING SETUP
+    // =========================================================================
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0f172a);
+    scene.fog = new THREE.FogExp2(0x0f172a, 0.015);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
+    const DEFAULT_CAM_POS = new THREE.Vector3(12, 13, 14);
+    camera.position.copy(DEFAULT_CAM_POS);
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: 'high-performance',
+      preserveDrawingBuffer: true // Needed so we can capture crisp canvas thumbnails when saving models!
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
+    container.appendChild(renderer.domElement);
+
+    // OrbitControls — strictly prevents flipping the ground upside down!
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.07;
+    controls.target.set(0, 0.5, 0);
+    controls.minDistance = 3;
+    controls.maxDistance = 45;
+    controls.minPolarAngle = 0.08;
+    controls.maxPolarAngle = Math.PI / 2 - 0.06;
+    controls.enablePan = true;
+    controls.screenSpacePanning = false;
+
+    // Studio Lighting
+    const hemiLight = new THREE.HemisphereLight(0xf8fafc, 0x1e293b, 0.85);
+    hemiLight.position.set(0, 25, 0);
+    scene.add(hemiLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.35);
+    dirLight.position.set(14, 24, 16);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
+    dirLight.shadow.camera.near = 2;
+    dirLight.shadow.camera.far = 65;
+    const d = 15;
+    dirLight.shadow.camera.left = -d;
+    dirLight.shadow.camera.right = d;
+    dirLight.shadow.camera.top = d;
+    dirLight.shadow.camera.bottom = -d;
+    dirLight.shadow.bias = -0.0005;
+    scene.add(dirLight);
+
+    const rimLight = new THREE.DirectionalLight(0x38bdf8, 0.35);
+    rimLight.position.set(-14, 10, -14);
+    scene.add(rimLight);
+
+    // =========================================================================
+    // 3. FIXED GROUND PLATFORM & GRID
+    // =========================================================================
+    const worldGroup = new THREE.Group();
+    scene.add(worldGroup);
+
+    const baseGeo = new THREE.BoxGeometry(GRID_SIZE + 0.6, 0.5, GRID_SIZE + 0.6);
+    const baseMat = new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      roughness: 0.85,
+      metalness: 0.1
+    });
+    const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+    baseMesh.position.set(0, -0.26, 0);
+    baseMesh.receiveShadow = true;
+    worldGroup.add(baseMesh);
+
+    const groundGeo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE);
+    groundGeo.rotateX(-Math.PI / 2);
+    const groundMat = new THREE.MeshStandardMaterial({
+      color: 0x162033,
+      roughness: 0.9,
+      metalness: 0.05
+    });
+    const groundPlane = new THREE.Mesh(groundGeo, groundMat);
+    groundPlane.position.y = 0;
+    groundPlane.receiveShadow = true;
+    groundPlane.name = 'ground_plane';
+    worldGroup.add(groundPlane);
+
+    const gridHelper = new THREE.GridHelper(GRID_SIZE, GRID_SIZE, 0x38bdf8, 0x334155);
+    gridHelper.position.y = 0.002;
+    gridHelper.material.transparent = true;
+    gridHelper.material.opacity = 0.55;
+    worldGroup.add(gridHelper);
+
+    // =========================================================================
+    // 4. MODEL GROUP, GHOST PREVIEW & SELECTION HIGHLIGHT
+    // =========================================================================
+    const modelGroup = new THREE.Group();
+    modelGroup.name = 'VoxelModel';
+    scene.add(modelGroup);
+
+    // Unit 1x1x1 base geometry scaled dynamically per cube size
+    const unitCubeGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const unitEdgesGeometry = new THREE.EdgesGeometry(unitCubeGeometry);
+
+    // Ghost Preview Cube
+    const ghostGroup = new THREE.Group();
+    const ghostMat = new THREE.MeshStandardMaterial({
+      color: state.activeColor,
+      transparent: true,
+      opacity: 0.48,
+      roughness: 0.3,
+      depthWrite: false
+    });
+    const ghostMesh = new THREE.Mesh(unitCubeGeometry, ghostMat);
+    const ghostWire = new THREE.LineSegments(
+      unitEdgesGeometry,
+      new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95 })
+    );
+    ghostGroup.add(ghostMesh);
+    ghostGroup.add(ghostWire);
+    ghostGroup.visible = false;
+    scene.add(ghostGroup);
+
+    // Selection Outline Box
+    const selectionBox = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(1.04, 1.04, 1.04)),
+      new THREE.LineBasicMaterial({ color: 0xf43f5e, linewidth: 2 })
+    );
+    selectionBox.visible = false;
+    scene.add(selectionBox);
+
+    // =========================================================================
+    // 5. VOXEL CRUD, RESIZING, UNDO/REDO & SPATIAL HELPERS
+    // =========================================================================
+    function roundSnap(val) {
+      return Math.round(val / SNAP_STEP) * SNAP_STEP;
+    }
+
+    function isWithinBounds(cx, cy, cz, size) {
+      const half = size / 2;
+      return (
+        cx - half >= -HALF_GRID - 0.001 &&
+        cx + half <= HALF_GRID + 0.001 &&
+        cz - half >= -HALF_GRID - 0.001 &&
+        cz + half <= HALF_GRID + 0.001 &&
+        cy - half >= -0.001 &&
+        cy + half <= MAX_HEIGHT + 0.001
+      );
+    }
+
+    function hasExactOverlap(cx, cy, cz, size, ignoreId = null) {
+      for (const [id, v] of state.voxels.entries()) {
+        if (id === ignoreId) continue;
+        if (
+          Math.abs(v.x - cx) < 0.01 &&
+          Math.abs(v.y - cy) < 0.01 &&
+          Math.abs(v.z - cz) < 0.01 &&
+          Math.abs(v.size - size) < 0.01
+        ) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function createVoxelMesh(id, cx, cy, cz, size, hexColor) {
+      const material = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(hexColor),
+        roughness: 0.42,
+        metalness: 0.06
+      });
+      const mesh = new THREE.Mesh(unitCubeGeometry, material);
+      mesh.position.set(cx, cy, cz);
+      mesh.scale.set(size, size, size);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.userData = { isVoxel: true, id, x: cx, y: cy, z: cz, size, color: hexColor };
+
+      const edgeLine = new THREE.LineSegments(
+        unitEdgesGeometry,
+        new THREE.LineBasicMaterial({ color: 0x0f172a, transparent: true, opacity: 0.22 })
+      );
+      edgeLine.userData.isHelper = true;
+      mesh.add(edgeLine);
+
+      return mesh;
+    }
+
+    function serializeCurrentVoxels() {
+      const list = [];
+      state.voxels.forEach((v) => {
+        list.push({
+          x: Number(v.x.toFixed(4)),
+          y: Number(v.y.toFixed(4)),
+          z: Number(v.z.toFixed(4)),
+          size: Number(v.size.toFixed(4)),
+          color: v.color
+        });
+      });
+      return list;
+    }
+
+    function saveHistory() {
+      state.undoStack.push(serializeCurrentVoxels());
+      if (state.undoStack.length > 50) state.undoStack.shift();
+      state.redoStack = [];
+      updateUIState();
+    }
+
+    function restoreSnapshot(snapshot) {
+      state.voxels.forEach((v) => {
+        modelGroup.remove(v.mesh);
+        v.mesh.material.dispose();
+      });
+      state.voxels.clear();
+      clearStagedAndSelection();
+
+      snapshot.forEach((item) => {
+        const size = item.size || 1;
+        const id = state.nextId++;
+        const mesh = createVoxelMesh(id, item.x, item.y, item.z, size, item.color);
+        modelGroup.add(mesh);
+        state.voxels.set(id, { id, mesh, color: item.color, x: item.x, y: item.y, z: item.z, size });
+      });
+      updateUIState();
+    }
+
+    function undo() {
+      if (state.isLocked || state.undoStack.length === 0) return;
+      state.redoStack.push(serializeCurrentVoxels());
+      const previous = state.undoStack.pop();
+      restoreSnapshot(previous);
+      showToast('Undid last action');
+    }
+
+    function redo() {
+      if (state.isLocked || state.redoStack.length === 0) return;
+      state.undoStack.push(serializeCurrentVoxels());
+      const next = state.redoStack.pop();
+      restoreSnapshot(next);
+      showToast('Redid action');
+    }
+
+    function addVoxel(cx, cy, cz, size = state.activeSize, color = state.activeColor, recordHistory = true) {
+      if (!isWithinBounds(cx, cy, cz, size)) {
+        showToast('Cube exceeds grid boundary');
+        return false;
+      }
+      if (hasExactOverlap(cx, cy, cz, size)) {
+        return false;
+      }
+
+      if (recordHistory) saveHistory();
+
+      const id = state.nextId++;
+      const mesh = createVoxelMesh(id, cx, cy, cz, size, color);
+      modelGroup.add(mesh);
+      state.voxels.set(id, { id, mesh, color, x: cx, y: cy, z: cz, size });
+
+      // Pop-in scale animation to target size
+      mesh.scale.set(size * 0.2, size * 0.2, size * 0.2);
+      animateScale(mesh, size);
+
+      updateUIState();
+      return true;
+    }
+
+    function removeVoxelById(id, recordHistory = true) {
+      const voxel = state.voxels.get(id);
+      if (!voxel) return false;
+
+      if (recordHistory) saveHistory();
+
+      modelGroup.remove(voxel.mesh);
+      voxel.mesh.material.dispose();
+      state.voxels.delete(id);
+
+      if (state.selectedId === id) {
+        state.selectedId = null;
+        selectionBox.visible = false;
+      }
+      updateUIState();
+      return true;
+    }
+
+    function resizeSelectedVoxel(newSize) {
+      if (!state.selectedId || !state.voxels.has(state.selectedId)) return;
+      const v = state.voxels.get(state.selectedId);
+      if (Math.abs(v.size - newSize) < 0.001) return;
+
+      // Keep bottom face anchored at its current elevation while scaling
+      const bottomY = v.y - v.size / 2;
+      const newCy = roundSnap(bottomY + newSize / 2);
+
+      if (!isWithinBounds(v.x, newCy, v.z, newSize)) {
+        showToast('Too large for current position');
+        return;
+      }
+
+      saveHistory();
+      v.size = newSize;
+      v.y = newCy;
+      v.mesh.position.set(v.x, v.y, v.z);
+      v.mesh.scale.set(newSize, newSize, newSize);
+      v.mesh.userData.size = newSize;
+      v.mesh.userData.y = newCy;
+
+      selectionBox.position.set(v.x, v.y, v.z);
+      selectionBox.scale.set(newSize, newSize, newSize);
+      showToast(`Resized cube to ${newSize}x`);
+    }
+
+    function animateScale(mesh, targetSize) {
+      let progress = 0;
+      function step() {
+        progress += 0.18;
+        if (progress >= 1) {
+          mesh.scale.set(targetSize, targetSize, targetSize);
+          return;
+        }
+        const s = targetSize * (0.2 + 0.8 * (1 - Math.pow(1 - progress, 3)));
+        mesh.scale.set(s, s, s);
+        requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    function setStagedPosition(pos) {
+      state.stagedPos = pos;
+      if (pos && !state.isLocked && state.mode === 'build') {
+        ghostMat.color.set(state.activeColor);
+        ghostGroup.position.set(pos.x, pos.y, pos.z);
+        ghostGroup.scale.set(pos.size, pos.size, pos.size);
+        ghostGroup.visible = true;
+      } else {
+        ghostGroup.visible = false;
+      }
+      updateUIState();
+    }
+
+    function setSelectedVoxel(id) {
+      state.selectedId = id;
+      if (id && state.voxels.has(id) && !state.isLocked) {
+        const v = state.voxels.get(id);
+        selectionBox.position.set(v.x, v.y, v.z);
+        selectionBox.scale.set(v.size, v.size, v.size);
+        selectionBox.visible = true;
+        // Sync size slider readout with selected cube's size
+        syncSizeControls(v.size);
+      } else {
+        selectionBox.visible = false;
+      }
+      updateUIState();
+    }
+
+    function clearStagedAndSelection() {
+      state.stagedPos = null;
+      ghostGroup.visible = false;
+      state.selectedId = null;
+      selectionBox.visible = false;
+      updateUIState();
+    }
+
+    // =========================================================================
+    // 6. RAYCASTING & MULTI-SIZE PLACEMENT SNAPPING
+    // =========================================================================
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+
+    let pointerDownPos = { x: 0, y: 0 };
+    let pointerDownTime = 0;
+    const DRAG_THRESHOLD_PX = 8;
+
+    function getRaycastTarget(clientX, clientY) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(pointer, camera);
+
+      const voxelMeshes = Array.from(state.voxels.values()).map((v) => v.mesh);
+      const targets = [...voxelMeshes, groundPlane];
+      const intersects = raycaster.intersectObjects(targets, false);
+
+      if (intersects.length === 0) return null;
+      return intersects[0];
+    }
+
+    function computePlacementCoords(hit) {
+      const newSize = state.activeSize;
+      const halfNew = newSize / 2;
+      const normal = hit.face.normal.clone();
+      normal.transformDirection(hit.object.matrixWorld).round();
+
+      if (hit.object.userData && hit.object.userData.isVoxel) {
+        const target = hit.object.userData;
+        const offsetDist = target.size / 2 + halfNew;
+
+        let cx = target.x + normal.x * offsetDist;
+        let cy = target.y + normal.y * offsetDist;
+        let cz = target.z + normal.z * offsetDist;
+
+        // If placing a smaller cube on a larger cube face, allow sub-grid alignment near tap point
+        if (newSize < target.size) {
+          if (normal.x === 0) cx = roundSnap(hit.point.x);
+          if (normal.y === 0) cy = Math.max(halfNew, roundSnap(hit.point.y));
+          if (normal.z === 0) cz = roundSnap(hit.point.z);
+        }
+
+        return {
+          x: Number(cx.toFixed(4)),
+          y: Number(cy.toFixed(4)),
+          z: Number(cz.toFixed(4)),
+          size: newSize
+        };
+      } else {
+        // Hit ground plane at y = 0: center sits at y = newSize / 2
+        const pt = hit.point;
+        let cx, cz;
+        if (newSize >= 1 && Number.isInteger(newSize)) {
+          // Clean 1-unit grid alignment for whole sizes
+          cx = Math.floor(pt.x) + (newSize % 2 === 1 ? 0.5 : 0);
+          cz = Math.floor(pt.z) + (newSize % 2 === 1 ? 0.5 : 0);
+        } else {
+          cx = roundSnap(pt.x);
+          cz = roundSnap(pt.z);
+        }
+
+        return {
+          x: Number(cx.toFixed(4)),
+          y: Number(halfNew.toFixed(4)),
+          z: Number(cz.toFixed(4)),
+          size: newSize
+        };
+      }
+    }
+
+    function handleCanvasTap(clientX, clientY) {
+      if (state.isLocked) {
+        showToast('Model is locked — tap Unlocked to edit');
+        return;
+      }
+
+      const hit = getRaycastTarget(clientX, clientY);
+      if (!hit) {
+        clearStagedAndSelection();
+        return;
+      }
+
+      // MODE A: SELECT / DELETE MODE
+      if (state.mode === 'select') {
+        if (hit.object.userData && hit.object.userData.isVoxel) {
+          const { id } = hit.object.userData;
+          if (state.selectedId === id) {
+            removeVoxelById(id, true);
+            showToast('Cube deleted');
+          } else {
+            setSelectedVoxel(id);
+          }
+        } else {
+          clearStagedAndSelection();
+        }
+        return;
+      }
+
+      // MODE B: BUILD MODE
+      if (state.mode === 'build') {
+        const targetPos = computePlacementCoords(hit);
+        if (!isWithinBounds(targetPos.x, targetPos.y, targetPos.z, targetPos.size)) {
+          showToast('Outside build grid');
+          return;
+        }
+
+        if (hasExactOverlap(targetPos.x, targetPos.y, targetPos.z, targetPos.size)) {
+          return;
+        }
+
+        if (!state.twoTapMode) {
+          addVoxel(targetPos.x, targetPos.y, targetPos.z, targetPos.size, state.activeColor, true);
+          return;
+        }
+
+        // 2-Tap Mode: 1st tap defines spot with ghost, 2nd tap on same spot places cube
+        if (
+          state.stagedPos &&
+          Math.abs(state.stagedPos.x - targetPos.x) < 0.01 &&
+          Math.abs(state.stagedPos.y - targetPos.y) < 0.01 &&
+          Math.abs(state.stagedPos.z - targetPos.z) < 0.01 &&
+          Math.abs(state.stagedPos.size - targetPos.size) < 0.01
+        ) {
+          addVoxel(targetPos.x, targetPos.y, targetPos.z, targetPos.size, state.activeColor, true);
+          setStagedPosition(null);
+        } else {
+          setStagedPosition(targetPos);
+        }
+      }
+    }
+
+    const domEl = renderer.domElement;
+    domEl.addEventListener('pointerdown', (e) => {
+      if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
+      pointerDownPos = { x: e.clientX, y: e.clientY };
+      pointerDownTime = performance.now();
+    });
+
+    domEl.addEventListener('pointerup', (e) => {
+      if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
+      const dx = e.clientX - pointerDownPos.x;
+      const dy = e.clientY - pointerDownPos.y;
+      const dist = Math.hypot(dx, dy);
+      const elapsed = performance.now() - pointerDownTime;
+
+      if (dist <= DRAG_THRESHOLD_PX && elapsed < 600) {
+        handleCanvasTap(e.clientX, e.clientY);
+      }
+    });
+
+    // =========================================================================
+    // 7. SAVE, REUSE / MERGE & UPLOAD MODELS (LOCALSTORAGE + JSON/OBJ/STL)
+    // =========================================================================
+    function getSavedModels() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch (e) {
+        console.warn('Could not read saved models:', e);
+        return [];
+      }
+    }
+
+    function setSavedModels(models) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(models));
+      } catch (e) {
+        showToast('Storage full — delete an old saved model');
+      }
+    }
+
+    function captureThumbnail() {
+      // Temporarily hide ghost & selection outlines for a clean thumbnail
+      const wasGhostVis = ghostGroup.visible;
+      const wasSelVis = selectionBox.visible;
+      ghostGroup.visible = false;
+      selectionBox.visible = false;
+      renderer.render(scene, camera);
+
+      const srcCanvas = renderer.domElement;
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.width = 240;
+      thumbCanvas.height = 160;
+      const ctx = thumbCanvas.getContext('2d');
+      ctx.drawImage(srcCanvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
+
+      ghostGroup.visible = wasGhostVis;
+      selectionBox.visible = wasSelVis;
+      return thumbCanvas.toDataURL('image/jpeg', 0.78);
+    }
+
+    function saveCurrentModelToLibrary(name) {
+      if (state.voxels.size === 0) {
+        showToast('Build at least one cube before saving');
+        return;
+      }
+      const cleanName = (name || '').trim() || `Model ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      const models = getSavedModels();
+      const entry = {
+        id: 'mdl_' + Date.now(),
+        name: cleanName,
+        createdAt: new Date().toLocaleDateString(),
+        cubeCount: state.voxels.size,
+        thumbnail: captureThumbnail(),
+        voxels: serializeCurrentVoxels()
+      };
+      models.unshift(entry);
+      setSavedModels(models);
+      renderSavedModelsList();
+      showToast(`Saved "${cleanName}"`);
+    }
+
+    function insertVoxelsIntoScene(voxelList, mergeMode = false) {
+      if (!Array.isArray(voxelList) || voxelList.length === 0) {
+        showToast('No cubes found in model');
+        return;
+      }
+
+      if (!mergeMode) {
+        saveHistory();
+        restoreSnapshot(voxelList);
+        return;
+      }
+
+      // Merge / Reuse Mode: find an open X offset so inserted model doesn't collide directly
+      saveHistory();
+      let minX = Infinity, maxX = -Infinity, minY = Infinity;
+      voxelList.forEach((v) => {
+        const s = v.size || 1;
+        minX = Math.min(minX, v.x - s / 2);
+        maxX = Math.max(maxX, v.x + s / 2);
+        minY = Math.min(minY, v.y - s / 2);
+      });
+
+      let shiftX = 0;
+      if (state.voxels.size > 0) {
+        let sceneMaxX = -Infinity;
+        state.voxels.forEach((v) => {
+          sceneMaxX = Math.max(sceneMaxX, v.x + v.size / 2);
+        });
+        const candidateShift = roundSnap(sceneMaxX - minX + 1);
+        if (maxX + candidateShift <= HALF_GRID) {
+          shiftX = candidateShift;
+        }
+      }
+
+      const shiftY = minY < 0 ? -minY : 0;
+      let addedCount = 0;
+      voxelList.forEach((item) => {
+        const size = item.size || 1;
+        const nx = roundSnap(item.x + shiftX);
+        const ny = roundSnap(item.y + shiftY);
+        const nz = roundSnap(item.z);
+        if (addVoxel(nx, ny, nz, size, item.color || state.activeColor, false)) {
+          addedCount++;
+        }
+      });
+      showToast(`Inserted ${addedCount} cubes into scene`);
+    }
+
+    // Automatically converts an uploaded Three.js BufferGeometry (.STL / .OBJ) into editable colored cubes
+    function voxelizeGeometry(geometry, targetResolution = 12) {
+      geometry.computeBoundingBox();
+      const bbox = geometry.boundingBox;
+      if (!bbox) return [];
+
+      const sizeVec = new THREE.Vector3();
+      bbox.getSize(sizeVec);
+      const maxDim = Math.max(sizeVec.x, sizeVec.y, sizeVec.z);
+      if (maxDim <= 0) return [];
+
+      // Normalize mesh so largest dimension spans `targetResolution` cubes (max 14 units)
+      const clampedRes = Math.min(targetResolution, 14);
+      const voxelStep = 1;
+      const scale = clampedRes / maxDim;
+
+      const mesh = new THREE.Mesh(
+        geometry,
+        new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })
+      );
+      mesh.scale.set(scale, scale, scale);
+      mesh.updateMatrixWorld(true);
+
+      const scaledBox = new THREE.Box3().setFromObject(mesh);
+      const center = new THREE.Vector3();
+      scaledBox.getCenter(center);
+
+      // Shift mesh so its X/Z center is at (0,0) and bottom rests at Y = 0
+      mesh.position.set(-center.x, -scaledBox.min.y, -center.z);
+      mesh.updateMatrixWorld(true);
+
+      const finalBox = new THREE.Box3().setFromObject(mesh);
+      const ray = new THREE.Raycaster();
+      const voxels = [];
+
+      const minX = Math.floor(finalBox.min.x);
+      const maxX = Math.ceil(finalBox.max.x);
+      const minY = 0;
+      const maxY = Math.min(MAX_HEIGHT - 1, Math.ceil(finalBox.max.y));
+      const minZ = Math.floor(finalBox.min.z);
+      const maxZ = Math.ceil(finalBox.max.z);
+
+      // Sample grid cells via multi-axis ray parity & surface proximity
+      for (let x = minX; x <= maxX; x += voxelStep) {
+        for (let y = minY; y <= maxY; y += voxelStep) {
+          for (let z = minZ; z <= maxZ; z += voxelStep) {
+            const cx = x + 0.5;
+            const cy = y + 0.5;
+            const cz = z + 0.5;
+            if (!isWithinBounds(cx, cy, cz, 1)) continue;
+
+            // Cast ray along +Y from cell center to test interiority (odd hits = inside solid)
+            ray.set(new THREE.Vector3(cx, cy, cz), new THREE.Vector3(0, 1, 0));
+            const hits = ray.intersectObject(mesh, true);
+            // Deduplicate close coplanar hits
+            let uniqueHits = 0;
+            let lastDist = -1;
+            for (const h of hits) {
+              if (h.distance - lastDist > 0.01) {
+                uniqueHits++;
+                lastDist = h.distance;
+              }
+            }
+
+            // Also check horizontal ray so thin shells are captured
+            ray.set(new THREE.Vector3(cx, cy, cz), new THREE.Vector3(1, 0, 0));
+            const xHits = ray.intersectObject(mesh, true);
+            const nearSurface =
+              (hits.length > 0 && hits[0].distance < 0.65) ||
+              (xHits.length > 0 && xHits[0].distance < 0.65);
+
+            if (uniqueHits % 2 === 1 || nearSurface) {
+              voxels.push({ x: cx, y: cy, z: cz, size: 1, color: state.activeColor });
+            }
+          }
+        }
+      }
+
+      return voxels;
+    }
+
+    function handleUploadedFile(file, mergeMode) {
+      if (!file) return;
+      const ext = file.name.split('.').pop().toLowerCase();
+      const reader = new FileReader();
+
+      if (ext === 'json') {
+        reader.onload = (e) => {
+          try {
+            const parsed = JSON.parse(e.target.result);
+            const list = Array.isArray(parsed) ? parsed : parsed.voxels;
+            if (!Array.isArray(list)) throw new Error('Invalid JSON structure');
+            insertVoxelsIntoScene(list, mergeMode);
+            modelsModal.classList.add('hidden');
+            showToast(`Loaded ${file.name}`);
+          } catch (err) {
+            showToast('Invalid VoxelForge .JSON file');
+          }
+        };
+        reader.readAsText(file);
+      } else if (ext === 'obj') {
+        reader.onload = (e) => {
+          try {
+            const loader = new OBJLoader();
+            const group = loader.parse(e.target.result);
+            const geometries = [];
+            group.traverse((child) => {
+              if (child.isMesh && child.geometry) {
+                geometries.push(child.geometry.clone());
+              }
+            });
+            if (geometries.length === 0) throw new Error('No mesh in OBJ');
+            // Merge into single geometry for voxelization
+            const combined = new THREE.BufferGeometry();
+            const positions = [];
+            geometries.forEach((g) => {
+              const nonIdx = g.index ? g.toNonIndexed() : g;
+              const pos = nonIdx.attributes.position;
+              for (let i = 0; i < pos.count; i++) {
+                positions.push(pos.getX(i), pos.getY(i), pos.getZ(i));
+              }
+            });
+            combined.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            const voxels = voxelizeGeometry(combined, 10);
+            insertVoxelsIntoScene(voxels, mergeMode);
+            modelsModal.classList.add('hidden');
+            showToast(`Converted ${file.name} into ${voxels.length} cubes`);
+          } catch (err) {
+            console.error(err);
+            showToast('Could not parse .OBJ file');
+          }
+        };
+        reader.readAsText(file);
+      } else if (ext === 'stl') {
+        reader.onload = (e) => {
+          try {
+            const loader = new STLLoader();
+            const geom = loader.parse(e.target.result);
+            const voxels = voxelizeGeometry(geom, 10);
+            insertVoxelsIntoScene(voxels, mergeMode);
+            modelsModal.classList.add('hidden');
+            showToast(`Converted ${file.name} into ${voxels.length} cubes`);
+          } catch (err) {
+            console.error(err);
+            showToast('Could not parse .STL file');
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      } else {
+        showToast('Unsupported format (use .JSON, .OBJ, or .STL)');
+      }
+    }
+
+    // =========================================================================
+    // 8. REAL 3D MODEL EXPORT ENGINE (.GLB, .OBJ, .STL, .JSON)
+    // =========================================================================
+    function getCenteredExportOffsets() {
+      let minX = Infinity, maxX = -Infinity;
+      let minY = Infinity;
+      let minZ = Infinity, maxZ = -Infinity;
+
+      state.voxels.forEach((v) => {
+        const half = v.size / 2;
+        minX = Math.min(minX, v.x - half);
+        maxX = Math.max(maxX, v.x + half);
+        minY = Math.min(minY, v.y - half);
+        minZ = Math.min(minZ, v.z - half);
+        maxZ = Math.max(maxZ, v.z + half);
+      });
+
+      return {
+        offsetX: (minX + maxX) / 2,
+        offsetY: minY,
+        offsetZ: (minZ + maxZ) / 2
+      };
+    }
+
+    /**
+     * Builds a unified, real 3D mesh with baked world transforms, welded/indexed
+     * vertices, centered X/Z footprint resting flat at Y = 0, and baked vertex colors.
+     */
+    function buildUnified3DMesh() {
+      const geometries = [];
+      const tempColor = new THREE.Color();
+      const { offsetX, offsetY, offsetZ } = getCenteredExportOffsets();
+
+      state.voxels.forEach((v) => {
+        // Clone non-indexed box geometry so each cube can hold crisp face normals & vertex colors
+        const geom = new THREE.BoxGeometry(1, 1, 1).toNonIndexed();
+        geom.scale(v.size, v.size, v.size);
+        geom.translate(v.x - offsetX, v.y - offsetY, v.z - offsetZ);
+
+        // Bake linear RGB vertex colors into the geometry
+        tempColor.set(v.color).convertSRGBToLinear();
+        const count = geom.attributes.position.count;
+        const colors = new Float32Array(count * 3);
+        for (let i = 0; i < count; i++) {
+          colors[i * 3] = tempColor.r;
+          colors[i * 3 + 1] = tempColor.g;
+          colors[i * 3 + 2] = tempColor.b;
+        }
+        geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        geometries.push(geom);
+      });
+
+      const mergedRaw = mergeGeometries(geometries, false);
+      geometries.forEach((g) => g.dispose());
+
+      // Weld shared coincident vertices while preserving hard normals & color boundaries
+      const unifiedGeometry = mergeVertices(mergedRaw, 1e-4);
+      mergedRaw.dispose();
+      unifiedGeometry.computeBoundingBox();
+      unifiedGeometry.computeBoundingSphere();
+
+      const material = new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 0.45,
+        metalness: 0.05
+      });
+
+      const mesh = new THREE.Mesh(unifiedGeometry, material);
+      mesh.name = 'VoxelForgeModel';
+      mesh.updateMatrixWorld(true);
+      return mesh;
+    }
+
+    /**
+     * Builds a clean standard Wavefront .OBJ scene grouped by color material
+     * so every 3D viewer & editor (Blender, Windows 3D Viewer, MeshLab, Unity)
+     * opens it strictly as a valid 3D mesh rather than plain text.
+     */
+    function buildStandardOBJScene() {
+      const { offsetX, offsetY, offsetZ } = getCenteredExportOffsets();
+      const byColor = new Map();
+
+      state.voxels.forEach((v) => {
+        const key = v.color.toLowerCase();
+        if (!byColor.has(key)) byColor.set(key, []);
+        const geom = new THREE.BoxGeometry(1, 1, 1).toNonIndexed();
+        geom.scale(v.size, v.size, v.size);
+        geom.translate(v.x - offsetX, v.y - offsetY, v.z - offsetZ);
+        byColor.get(key).push(geom);
+      });
+
+      const objGroup = new THREE.Group();
+      objGroup.name = 'VoxelForgeModel';
+
+      byColor.forEach((geomList, hex) => {
+        const merged = mergeGeometries(geomList, false);
+        geomList.forEach((g) => g.dispose());
+        const welded = mergeVertices(merged, 1e-4);
+        merged.dispose();
+
+        const mat = new THREE.MeshStandardMaterial({
+          name: `mat_${hex.replace('#', '')}`,
+          color: new THREE.Color(hex),
+          roughness: 0.45,
+          metalness: 0.05
+        });
+        const subMesh = new THREE.Mesh(welded, mat);
+        subMesh.name = `VoxelMesh_${hex.replace('#', '')}`;
+        objGroup.add(subMesh);
+      });
+
+      objGroup.updateMatrixWorld(true);
+      const exporter = new OBJExporter();
+      const objText = exporter.parse(objGroup);
+
+      objGroup.traverse((child) => {
+        if (child.isMesh) {
+          child.geometry.dispose();
+          child.material.dispose();
+        }
+      });
+
+      return objText;
+    }
+
+    function triggerFileDownload(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.style.display = 'none';
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 200);
+    }
+
+    function exportModel(format) {
+      if (state.voxels.size === 0) {
+        showToast('Add at least one cube before exporting');
+        return;
+      }
+
+      const timestamp = new Date().toISOString().slice(0, 10);
+
+      if (format === 'json') {
+        const payload = {
+          app: 'VoxelForge 3D',
+          version: 2,
+          exportedAt: new Date().toISOString(),
+          voxels: serializeCurrentVoxels()
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        triggerFileDownload(blob, `voxelforge-project-${timestamp}.json`);
+        showToast('Downloaded .JSON project');
+        return;
+      }
+
+      if (format === 'obj') {
+        try {
+          const objContent = buildStandardOBJScene();
+          // Use application/octet-stream so browsers save it as a binary 3D model file instead of plain text
+          const blob = new Blob([objContent], { type: 'application/octet-stream' });
+          triggerFileDownload(blob, `voxelforge-3dmodel-${timestamp}.obj`);
+          showToast('Downloaded 3D .OBJ model');
+        } catch (err) {
+          console.error('OBJ Export failed:', err);
+          showToast('Failed to export OBJ');
+        }
+        return;
+      }
+
+      const realMesh = buildUnified3DMesh();
+      const exportScene = new THREE.Scene();
+      exportScene.add(realMesh);
+
+      const cleanupExportMesh = () => {
+        realMesh.geometry.dispose();
+        realMesh.material.dispose();
+      };
+
+      try {
+        if (format === 'stl') {
+          const exporter = new STLExporter();
+          const result = exporter.parse(exportScene, { binary: true });
+          const blob = new Blob([result], { type: 'application/octet-stream' });
+          triggerFileDownload(blob, `voxelforge-3dprint-${timestamp}.stl`);
+          cleanupExportMesh();
+          showToast('Downloaded 3D-print ready .STL model');
+        } else if (format === 'glb') {
+          const exporter = new GLTFExporter();
+          exporter.parse(
+            exportScene,
+            (gltf) => {
+              const blob = new Blob([gltf], { type: 'model/gltf-binary' });
+              triggerFileDownload(blob, `voxelforge-3dmodel-${timestamp}.glb`);
+              cleanupExportMesh();
+              showToast('Downloaded real 3D .GLB model');
+            },
+            (err) => {
+              console.error('GLB Export Error:', err);
+              cleanupExportMesh();
+              showToast('Failed to export GLB');
+            },
+            { binary: true }
+          );
+        }
+      } catch (err) {
+        console.error('Export failed:', err);
+        cleanupExportMesh();
+        showToast('Export error occurred');
+      }
+    }
+
+    // =========================================================================
+    // 9. UI CONTROLS & EVENT BINDINGS
+    // =========================================================================
+    const cubeCountEl = document.getElementById('cube-count');
+    const btnLock = document.getElementById('btn-lock');
+    const iconUnlocked = document.getElementById('icon-unlocked');
+    const iconLocked = document.getElementById('icon-locked');
+    const lockLabel = document.getElementById('lock-label');
+    const btnUndo = document.getElementById('btn-undo');
+    const btnRedo = document.getElementById('btn-redo');
+    const btnExportToggle = document.getElementById('btn-export-toggle');
+    const exportMenu = document.getElementById('export-menu');
+    const btnClear = document.getElementById('btn-clear');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const contextBar = document.getElementById('context-action-bar');
+    const btnConfirmPlace = document.getElementById('btn-confirm-place');
+    const btnDeleteSelected = document.getElementById('btn-delete-selected');
+    const btnCancelSelection = document.getElementById('btn-cancel-selection');
+    const bottomDock = document.getElementById('bottom-dock');
+    const modeBuildBtn = document.getElementById('mode-build');
+    const modeSelectBtn = document.getElementById('mode-select');
+    const btnTapMode = document.getElementById('btn-tap-mode');
+    const btnResetCam = document.getElementById('btn-reset-cam');
+    const paletteContainer = document.getElementById('color-palette');
+    const customColorInput = document.getElementById('custom-color-input');
+    const confirmModal = document.getElementById('confirm-modal');
+    const modalCancel = document.getElementById('modal-cancel');
+    const modalConfirm = document.getElementById('modal-confirm');
+
+    // Size controls
+    const sizeReadout = document.getElementById('size-readout');
+    const sizeSlider = document.getElementById('size-slider');
+    const btnSizeDec = document.getElementById('btn-size-dec');
+    const btnSizeInc = document.getElementById('btn-size-inc');
+    const sizePresetBtns = document.querySelectorAll('.size-preset');
+
+    // Models & Upload modal elements
+    const btnModels = document.getElementById('btn-models');
+    const modelsModal = document.getElementById('models-modal');
+    const btnCloseModels = document.getElementById('btn-close-models');
+    const saveModelNameInput = document.getElementById('save-model-name');
+    const btnSaveModel = document.getElementById('btn-save-model');
+    const modelFileInput = document.getElementById('model-file-input');
+    const uploadMergeCheckbox = document.getElementById('upload-merge-mode');
+    const savedModelsGrid = document.getElementById('saved-models-grid');
+    const savedCountEl = document.getElementById('saved-count');
+
+    let toastTimer = null;
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-msg').textContent = msg;
+      toast.classList.remove('opacity-0', '-translate-y-2');
+      toast.classList.add('opacity-100', 'translate-y-0');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', '-translate-y-2');
+      }, 2200);
+    }
+
+    function syncSizeControls(sizeVal) {
+      const clamped = Math.max(0.25, Math.min(4, Number(sizeVal)));
+      state.activeSize = clamped;
+      sizeReadout.textContent = `${clamped % 1 === 0 ? clamped.toFixed(1) : clamped}x`;
+      sizeSlider.value = clamped;
+
+      sizePresetBtns.forEach((btn) => {
+        const preset = parseFloat(btn.getAttribute('data-size'));
+        if (Math.abs(preset - clamped) < 0.001) {
+          btn.className = 'size-preset px-2 py-1 rounded-lg text-[11px] font-semibold bg-sky-500 text-slate-950 transition';
+        } else {
+          btn.className = 'size-preset px-2 py-1 rounded-lg text-[11px] font-semibold bg-slate-800 text-slate-300 hover:text-white transition';
+        }
+      });
+
+      // Update ghost cube live if currently staged
+      if (state.stagedPos) {
+        const bottomY = state.stagedPos.y - state.stagedPos.size / 2;
+        state.stagedPos.size = clamped;
+        state.stagedPos.y = roundSnap(bottomY + clamped / 2);
+        ghostGroup.position.set(state.stagedPos.x, state.stagedPos.y, state.stagedPos.z);
+        ghostGroup.scale.set(clamped, clamped, clamped);
+      }
+    }
+
+    function handleSizeChange(newSize) {
+      const clamped = Math.max(0.25, Math.min(4, roundSnap(newSize)));
+      syncSizeControls(clamped);
+
+      // If in Select mode with a selected cube, resize that cube directly!
+      if (!state.isLocked && state.mode === 'select' && state.selectedId) {
+        resizeSelectedVoxel(clamped);
+      }
+    }
+
+    sizePresetBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        handleSizeChange(parseFloat(btn.getAttribute('data-size')));
+      });
+    });
+
+    sizeSlider.addEventListener('input', (e) => {
+      handleSizeChange(parseFloat(e.target.value));
+    });
+
+    btnSizeDec.addEventListener('click', () => {
+      handleSizeChange(state.activeSize - 0.25);
+    });
+
+    btnSizeInc.addEventListener('click', () => {
+      handleSizeChange(state.activeSize + 0.25);
+    });
+
+    function renderPalette() {
+      paletteContainer.innerHTML = '';
+      PALETTE.forEach((hex) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `swatch-btn w-7 h-7 sm:w-8 sm:h-8 rounded-full shrink-0 border border-white/25 ${
+          state.activeColor.toLowerCase() === hex.toLowerCase() ? 'swatch-active' : ''
+        }`;
+        btn.style.backgroundColor = hex;
+        btn.title = hex;
+        btn.addEventListener('click', () => selectColor(hex));
+        paletteContainer.appendChild(btn);
+      });
+    }
+
+    function selectColor(hex) {
+      state.activeColor = hex;
+      ghostMat.color.set(hex);
+
+      if (!state.isLocked && state.mode === 'select' && state.selectedId && state.voxels.has(state.selectedId)) {
+        saveHistory();
+        const v = state.voxels.get(state.selectedId);
+        v.color = hex;
+        v.mesh.material.color.set(hex);
+        showToast('Cube recolored');
+      }
+
+      renderPalette();
+    }
+
+    function renderSavedModelsList() {
+      const models = getSavedModels();
+      savedCountEl.textContent = models.length;
+      savedModelsGrid.innerHTML = '';
+
+      if (models.length === 0) {
+        savedModelsGrid.innerHTML = `
+          <div class="col-span-full bg-slate-900/50 border border-slate-800 rounded-2xl p-6 text-center text-xs text-slate-400">
+            No saved models yet. Build something above and click <strong>Save Model</strong> to store it here for reuse!
+          </div>
+        `;
+        return;
+      }
+
+      models.forEach((mdl) => {
+        const card = document.createElement('div');
+        card.className = 'bg-slate-900/90 border border-slate-800 rounded-2xl p-2.5 flex flex-col gap-2';
+        card.innerHTML = `
+          <div class="relative aspect-[3/2] w-full rounded-xl overflow-hidden bg-slate-950 border border-white/5">
+            <img src="${mdl.thumbnail}" alt="${mdl.name}" class="w-full h-full object-cover" />
+            <span class="absolute bottom-1.5 right-1.5 bg-slate-950/85 text-sky-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-white/10">
+              ${mdl.cubeCount} cubes
+            </span>
+          </div>
+          <div class="flex items-center justify-between px-0.5">
+            <div class="truncate">
+              <div class="text-xs sm:text-sm font-bold text-white truncate">${mdl.name}</div>
+              <div class="text-[10px] text-slate-400">${mdl.createdAt}</div>
+            </div>
+            <button data-del-id="${mdl.id}" type="button" title="Delete Saved Model"
+              class="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 transition">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
+          </div>
+          <div class="grid grid-cols-2 gap-1.5 pt-0.5">
+            <button data-load-id="${mdl.id}" type="button"
+              class="py-1.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-semibold transition">
+              Load
+            </button>
+            <button data-insert-id="${mdl.id}" type="button"
+              class="py-1.5 px-2 rounded-xl bg-indigo-500/25 hover:bg-indigo-500/40 text-indigo-200 border border-indigo-400/30 text-xs font-semibold transition">
+              + Insert
+            </button>
+          </div>
+        `;
+        savedModelsGrid.appendChild(card);
+      });
+
+      // Bind card actions
+      savedModelsGrid.querySelectorAll('[data-load-id]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const found = getSavedModels().find((m) => m.id === btn.getAttribute('data-load-id'));
+          if (found) {
+            if (state.isLocked) {
+              showToast('Unlock model first to load');
+              return;
+            }
+            insertVoxelsIntoScene(found.voxels, false);
+            modelsModal.classList.add('hidden');
+            showToast(`Loaded "${found.name}"`);
+          }
+        });
+      });
+
+      savedModelsGrid.querySelectorAll('[data-insert-id]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const found = getSavedModels().find((m) => m.id === btn.getAttribute('data-insert-id'));
+          if (found) {
+            if (state.isLocked) {
+              showToast('Unlock model first to insert');
+              return;
+            }
+            insertVoxelsIntoScene(found.voxels, true);
+            modelsModal.classList.add('hidden');
+          }
+        });
+      });
+
+      savedModelsGrid.querySelectorAll('[data-del-id]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const delId = btn.getAttribute('data-del-id');
+          const updated = getSavedModels().filter((m) => m.id !== delId);
+          setSavedModels(updated);
+          renderSavedModelsList();
+          showToast('Removed from library');
+        });
+      });
+    }
+
+    function updateUIState() {
+      cubeCountEl.textContent = state.voxels.size;
+
+      btnUndo.disabled = state.isLocked || state.undoStack.length === 0;
+      btnRedo.disabled = state.isLocked || state.redoStack.length === 0;
+
+      if (state.isLocked) {
+        iconUnlocked.classList.add('hidden');
+        iconLocked.classList.remove('hidden');
+        lockLabel.textContent = 'Locked';
+        btnLock.classList.remove('text-emerald-400', 'border-emerald-500/30');
+        btnLock.classList.add('text-amber-400', 'border-amber-500/60', 'bg-amber-500/15', 'locked-ring');
+        bottomDock.classList.add('opacity-45', 'pointer-events-none');
+      } else {
+        iconUnlocked.classList.remove('hidden');
+        iconLocked.classList.add('hidden');
+        lockLabel.textContent = 'Unlocked';
+        btnLock.classList.add('text-emerald-400', 'border-emerald-500/30');
+        btnLock.classList.remove('text-amber-400', 'border-amber-500/60', 'bg-amber-500/15', 'locked-ring');
+        bottomDock.classList.remove('opacity-45', 'pointer-events-none');
+      }
+
+      if (state.mode === 'build') {
+        modeBuildBtn.className = 'px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 bg-sky-500 text-slate-950 shadow transition';
+        modeSelectBtn.className = 'px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 text-slate-300 hover:text-white transition';
+      } else {
+        modeSelectBtn.className = 'px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 bg-rose-500 text-white shadow transition';
+        modeBuildBtn.className = 'px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 text-slate-300 hover:text-white transition';
+      }
+
+      btnTapMode.textContent = state.twoTapMode ? '2-Tap Mode' : '1-Tap Mode';
+
+      const showConfirm = !state.isLocked && state.mode === 'build' && state.stagedPos !== null;
+      const showDelete = !state.isLocked && state.mode === 'select' && state.selectedId !== null;
+
+      if (showConfirm || showDelete) {
+        contextBar.classList.remove('hidden');
+        btnConfirmPlace.classList.toggle('hidden', !showConfirm);
+        btnDeleteSelected.classList.toggle('hidden', !showDelete);
+      } else {
+        contextBar.classList.add('hidden');
+      }
+
+      if (state.isLocked) {
+        statusDot.className = 'w-2 h-2 rounded-full bg-amber-400 shrink-0';
+        statusText.textContent = 'Model Locked — Rotate & zoom freely without editing';
+      } else if (state.mode === 'select') {
+        statusDot.className = 'w-2 h-2 rounded-full bg-rose-400 shrink-0';
+        statusText.textContent = state.selectedId
+          ? 'Tap cube again to delete, or pick a new size / color'
+          : 'Tap any cube to select, resize, recolor, or delete';
+      } else if (state.twoTapMode) {
+        statusDot.className = 'w-2 h-2 rounded-full bg-sky-400 shrink-0';
+        statusText.textContent = state.stagedPos
+          ? 'Tap highlighted spot again (or Place Cube) to confirm'
+          : `Tap once to define spot (${state.activeSize}x), tap again to build`;
+      } else {
+        statusDot.className = 'w-2 h-2 rounded-full bg-emerald-400 shrink-0';
+        statusText.textContent = `1-Tap Mode (${state.activeSize}x): Tap grid or face to build`;
+      }
+    }
+
+    // Models Modal Events
+    btnModels.addEventListener('click', () => {
+      renderSavedModelsList();
+      modelsModal.classList.remove('hidden');
+    });
+
+    btnCloseModels.addEventListener('click', () => {
+      modelsModal.classList.add('hidden');
+    });
+
+    btnSaveModel.addEventListener('click', () => {
+      saveCurrentModelToLibrary(saveModelNameInput.value);
+      saveModelNameInput.value = '';
+    });
+
+    modelFileInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file) {
+        handleUploadedFile(file, uploadMergeCheckbox.checked);
+        modelFileInput.value = '';
+      }
+    });
+
+    // Lock / Unlock Button
+    btnLock.addEventListener('click', () => {
+      state.isLocked = !state.isLocked;
+      clearStagedAndSelection();
+      updateUIState();
+      showToast(state.isLocked ? 'Model locked for safe viewing' : 'Model unlocked for editing');
+    });
+
+    btnUndo.addEventListener('click', undo);
+    btnRedo.addEventListener('click', redo);
+
+    btnExportToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      exportMenu.classList.toggle('hidden');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!exportMenu.contains(e.target) && e.target !== btnExportToggle) {
+        exportMenu.classList.add('hidden');
+      }
+    });
+
+    document.querySelectorAll('.export-option').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const format = btn.getAttribute('data-export');
+        exportMenu.classList.add('hidden');
+        exportModel(format);
+      });
+    });
+
+    btnClear.addEventListener('click', () => {
+      if (state.isLocked) {
+        showToast('Unlock model first to clear');
+        return;
+      }
+      if (state.voxels.size === 0) {
+        showToast('Workspace is already empty');
+        return;
+      }
+      confirmModal.classList.remove('hidden');
+    });
+
+    modalCancel.addEventListener('click', () => confirmModal.classList.add('hidden'));
+    modalConfirm.addEventListener('click', () => {
+      confirmModal.classList.add('hidden');
+      saveHistory();
+      restoreSnapshot([]);
+      showToast('Workspace cleared');
+    });
+
+    modeBuildBtn.addEventListener('click', () => {
+      state.mode = 'build';
+      clearStagedAndSelection();
+      updateUIState();
+    });
+
+    modeSelectBtn.addEventListener('click', () => {
+      state.mode = 'select';
+      clearStagedAndSelection();
+      updateUIState();
+    });
+
+    btnTapMode.addEventListener('click', () => {
+      state.twoTapMode = !state.twoTapMode;
+      setStagedPosition(null);
+      updateUIState();
+      showToast(state.twoTapMode ? '2-Tap Placement enabled' : '1-Tap Instant Placement enabled');
+    });
+
+    btnConfirmPlace.addEventListener('click', () => {
+      if (state.stagedPos && !state.isLocked) {
+        const { x, y, z, size } = state.stagedPos;
+        addVoxel(x, y, z, size, state.activeColor, true);
+        setStagedPosition(null);
+      }
+    });
+
+    btnDeleteSelected.addEventListener('click', () => {
+      if (state.selectedId && !state.isLocked) {
+        removeVoxelById(state.selectedId, true);
+        showToast('Cube deleted');
+      }
+    });
+
+    btnCancelSelection.addEventListener('click', () => {
+      clearStagedAndSelection();
+    });
+
+    btnResetCam.addEventListener('click', () => {
+      camera.position.copy(DEFAULT_CAM_POS);
+      controls.target.set(0, 0.5, 0);
+      controls.update();
+      showToast('Camera view reset');
+    });
+
+    customColorInput.addEventListener('input', (e) => {
+      selectColor(e.target.value);
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        redo();
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedId && !state.isLocked) {
+        removeVoxelById(state.selectedId, true);
+        showToast('Cube deleted');
+      } else if (e.key === 'Escape') {
+        clearStagedAndSelection();
+        modelsModal.classList.add('hidden');
+      }
+    });
+
+    // =========================================================================
+    // 10. STARTER SEED MODEL & RENDER LOOP
+    // =========================================================================
+    function buildStarterModel() {
+      addVoxel(-0.5, 0.5, 0.5, 1, '#38bdf8', false);
+      addVoxel(0.5, 0.5, 0.5, 1, '#6366f1', false);
+      addVoxel(1.5, 0.5, 0.5, 1, '#38bdf8', false);
+      addVoxel(0.5, 1.25, 0.5, 0.5, '#f8fafc', false);
+      updateUIState();
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    let clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const elapsed = clock.getElapsedTime();
+
+      if (ghostGroup.visible) {
+        ghostMat.opacity = 0.42 + Math.sin(elapsed * 5) * 0.14;
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener('load', () => {
+      renderPalette();
+      syncSizeControls(1);
+      buildStarterModel();
+      animate();
+    });
+  </script>
+</body>
+</html>
